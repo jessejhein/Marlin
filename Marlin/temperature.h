@@ -45,6 +45,22 @@ extern float current_temperature_bed;
   extern float redundant_temperature;
 #endif
 
+// thermal runaway variables
+#ifdef THERMAL_RUNAWAY_PROTECTION_PERIOD && THERMAL_RUNAWAY_PROTECTION_PERIOD > 0
+//#define THERMAL_RUNAWAY_TEMP_CHANGE_PERIOD 30
+//#define THERMAL_RUNAWAY_TEMP_CHANGE_DELTA 5
+void thermal_runaway_protection(int *state, unsigned long *timer, float *temperature, int *target_temperature, int heater_id, int period_seconds, int delta_degc);
+static int thermal_runaway_state_machine[EXTRUDERS]; // = {0,0,0};
+static unsigned long thermal_runaway_timer[EXTRUDERS]; // = {0,0,0};
+//static float thermal_runaway_old_target_temperature[EXTRUDERS]; // = {0,0,0}
+static bool thermal_runaway = false;
+  #if TEMP_SENSOR_BED != 0
+    static int thermal_runaway_bed_state_machine;
+    static unsigned long thermal_runaway_bed_timer;
+  //  static float thermal_runaway_bed_old_target_temperature;
+  #endif
+#endif
+
 #if defined(CONTROLLERFAN_PIN) && CONTROLLERFAN_PIN > -1
   extern unsigned char soft_pwm_bed;
 #endif
@@ -98,10 +114,19 @@ FORCE_INLINE float degTargetBed() {
 
 FORCE_INLINE void setTargetHotend(const float &celsius, uint8_t extruder) {  
   target_temperature[extruder] = celsius;
+  //// reset thermal runaway state
+  //#ifdef THERMAL_RUNAWAY_PROTECTION_PERIOD && THERMAL_RUNAWAY_PROTECTION_PERIOD > 0
+  //thermal_runaway_state_machine[extruder] = 0;
+  ////SERIAL_ERRORLNPGM("Set Target Hot End!");
+  //#endif
 };
 
 FORCE_INLINE void setTargetBed(const float &celsius) {  
   target_temperature_bed = celsius;
+  //// reset thermal runaway state
+  //#ifdef THERMAL_RUNAWAY_PROTECTION_BED_PERIOD && THERMAL_RUNAWAY_PROTECTION_BED_PERIOD > 0
+  //static int thermal_runaway_bed_state_machine = 0;
+  //#endif
 };
 
 FORCE_INLINE bool isHeatingHotend(uint8_t extruder){  
@@ -154,6 +179,8 @@ void disable_heater();
 void setWatch();
 void updatePID();
 
+  //float *old_target_temperature, 
+  
 FORCE_INLINE void autotempShutdown(){
  #ifdef AUTOTEMP
  if(autotemp_enabled)

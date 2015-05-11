@@ -58,35 +58,50 @@
 #define TEMP_SENSOR_AD595_OFFSET 0.0
 #define TEMP_SENSOR_AD595_GAIN   1.0
 
-//This is for controlling a fan to cool down the stepper drivers
+//This is for case a fan to cool down the electronics it will turn on after setup is complete.
 //it will turn on when any driver is enabled
 //and turn off after the set amount of seconds from last driver being disabled again
-#define CONTROLLERFAN_PIN -1 //Pin used for the fan to cool controller (-1 to disable)
-#define CONTROLLERFAN_SECS 60 //How many seconds, after all motors were disabled, the fan should run
-#define CONTROLLERFAN_SPEED 255  // == full speed
+#define CASEFAN_PIN FAN3_PIN //Pin used for the fan to cool controller (-1 to disable)
+#define CASEFAN_SECS 60 //How many seconds, after all motors were disabled, the fan should run before going back to idle speed.
+#define CASEFAN_SPEED_FULL 130  // Full speed for when motor are active
+#define CASEFAN_SPEED_IDLE 0  	// Idle speed for when the motor have been inactive	
+#define CASEFAN_SPEED_MAX 255  	// Maximum limit for the fan speed so it does not burn out. Use 128 for 12v fans with 24V Power Supplies
+#define CASEFAN_SPEED_MIN 0	// Minimum limit for the fan speed where it will start to spin from a stop without a push.
 
 // When first starting the main fan, run it at full speed for the
 // given number of milliseconds.  This gets the fan spinning reliably
 // before setting a PWM value. (Does not work with software PWM for fan on Sanguinololu)
-//#define FAN_KICKSTART_TIME 100
+#define FAN_KICKSTART_TIME 100
 
-// Extruder cooling fans
-// Configure fan pin outputs to automatically turn on/off when the associated
-// extruder temperature is above/below EXTRUDER_AUTO_FAN_TEMPERATURE.
-// Multiple extruders can be assigned to the same pin in which case
-// the fan will turn on when any selected extruder is above the threshold.
-#define EXTRUDER_0_AUTO_FAN_PIN   -1
-#define EXTRUDER_1_AUTO_FAN_PIN   -1
-#define EXTRUDER_2_AUTO_FAN_PIN   -1
-#define EXTRUDER_AUTO_FAN_TEMPERATURE 50
-#define EXTRUDER_AUTO_FAN_SPEED   255  // == full speed
 
+// Extruder Fan Setup 
+// If set to -1 all Extruder fans will be disabled
+// If set to  1 only EX_FAN_0 will be used as a nozzle cooling fan for Extruder0
+// If set to  2 EX_FAN_0 and EX_FAN_1 will be used as nozzle cooling fan and will switch between active nozzles
+// If set to  3 EX_FAN_0 will be Contorled by M106 S255 and EX_FAN_1 will be controled by M106 P1 S255
+// If set to  4 EX_FAN_0 will be used as a nozzle cooling fan and EX_FAN_1 will be used as a heat sink fan
+#define EXTRUDER_FAN_SETUP 1
+#define EX_FAN_0 FAN_PIN
+#define EX_FAN_1 FAN1_PIN
+
+#if defined(EXTRUDER_FAN_SETUP) && EXTRUDER_FAN_SETUP == 4
+    // Extruder cooling fans
+    // Configure fan pin outputs to automatically turn on/off when the associated
+    // extruder temperature is above/below EXTRUDER_AUTO_FAN_TEMPERATURE.
+    // Multiple extruders can be assigned to the same pin in which case 
+    // the fan will turn on when any selected extruder is above the threshold.
+    #define EXTRUDER_0_AUTO_FAN_PIN   EX_FAN_1
+    #define EXTRUDER_1_AUTO_FAN_PIN   EX_FAN_1
+    #define EXTRUDER_2_AUTO_FAN_PIN   -1
+    #define EXTRUDER_AUTO_FAN_TEMPERATURE 60
+    #define EXTRUDER_AUTO_FAN_SPEED   255  // == full speed
+#endif
 
 //===========================================================================
 //=============================Mechanical Settings===========================
-//===========================================================================
+//===========================================================================100
 
-#define ENDSTOPS_ONLY_FOR_HOMING // If defined the endstops will only be used for homing
+//#define ENDSTOPS_ONLY_FOR_HOMING // If defined the endstops will only be used for homing
 
 
 //// AUTOSET LOCATIONS OF LIMIT SWITCHES
@@ -216,7 +231,7 @@
 #define X_HOME_RETRACT_MM 5
 #define Y_HOME_RETRACT_MM 5
 #define Z_HOME_RETRACT_MM 2
-//#define QUICK_HOME  //if this is defined, if both x and y are to be homed, a diagonal move will be performed initially.
+#define QUICK_HOME  //if this is defined, if both x and y are to be homed, a diagonal move will be performed initially.
 
 #define AXIS_RELATIVE_MODES {false, false, false, false}
 
@@ -271,7 +286,7 @@
 #define MICROSTEP_MODES {16,16,16,16,16} // [1,2,4,8,16]
 
 // Motor Current setting (Only functional when motor driver current ref pins are connected to a digital trimpot on supported boards)
-#define DIGIPOT_MOTOR_CURRENT {135,135,135,135,135} // Values 0-255 (RAMBO 135 = ~0.75A, 185 = ~1A)
+#define DIGIPOT_MOTOR_CURRENT {175,175,220,135,135} // Values 0-255 (RAMBO 135 = ~0.75A, 185 = ~1A)
 
 // uncomment to enable an I2C based DIGIPOT like on the Azteeg X3 Pro
 //#define DIGIPOT_I2C
