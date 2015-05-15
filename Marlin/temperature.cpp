@@ -64,6 +64,7 @@ float current_temperature_bed = 0.0;
   
 #ifdef FAN_SOFT_PWM
   unsigned char fanSpeedSoftPwm;
+  unsigned char fanSpeedSoftPwm1;
 #endif
 
 unsigned char soft_pwm_bed;
@@ -110,6 +111,7 @@ static volatile bool temp_meas_ready = false;
 
 #ifdef FAN_SOFT_PWM
   static unsigned char soft_pwm_fan;
+  static unsigned char soft_pwm_fan1;
 #endif
 #if (defined(EXTRUDER_0_AUTO_FAN_PIN) && EXTRUDER_0_AUTO_FAN_PIN > -1) || \
     (defined(EXTRUDER_1_AUTO_FAN_PIN) && EXTRUDER_1_AUTO_FAN_PIN > -1) || \
@@ -179,7 +181,7 @@ void PID_autotune(float temp, int extruder, int ncycles)
   float Kp, Ki, Kd;
   float max = 0, min = 10000;
 
-  if ((extruder >= EXTRUDERS)
+  if ((extruder > EXTRUDERS)
   #if (TEMP_BED_PIN <= -1)
        ||(extruder < 0)
   #endif
@@ -187,7 +189,7 @@ void PID_autotune(float temp, int extruder, int ncycles)
           SERIAL_ECHOLN("PID Autotune failed. Bad extruder number.");
           return;
         }
-	
+
   SERIAL_ECHOLN("PID Autotune start");
   
   disable_heater(); // switch off all heaters.
@@ -250,7 +252,7 @@ void PID_autotune(float temp, int extruder, int ncycles)
               Kp = 0.6*Ku;
               Ki = 2*Kp/Tu;
               Kd = Kp*Tu/8;
-              SERIAL_PROTOCOLLNPGM(" Classic PID ");
+              SERIAL_PROTOCOLLNPGM(" Clasic PID ");
               SERIAL_PROTOCOLPGM(" Kp: "); SERIAL_PROTOCOLLN(Kp);
               SERIAL_PROTOCOLPGM(" Ki: "); SERIAL_PROTOCOLLN(Ki);
               SERIAL_PROTOCOLPGM(" Kd: "); SERIAL_PROTOCOLLN(Kd);
@@ -258,14 +260,14 @@ void PID_autotune(float temp, int extruder, int ncycles)
               Kp = 0.33*Ku;
               Ki = Kp/Tu;
               Kd = Kp*Tu/3;
-              SERIAL_PROTOCOLLNPGM(" Some overshoot ");
+              SERIAL_PROTOCOLLNPGM(" Some overshoot ")
               SERIAL_PROTOCOLPGM(" Kp: "); SERIAL_PROTOCOLLN(Kp);
               SERIAL_PROTOCOLPGM(" Ki: "); SERIAL_PROTOCOLLN(Ki);
               SERIAL_PROTOCOLPGM(" Kd: "); SERIAL_PROTOCOLLN(Kd);
               Kp = 0.2*Ku;
               Ki = 2*Kp/Tu;
               Kd = Kp*Tu/3;
-              SERIAL_PROTOCOLLNPGM(" No overshoot ");
+              SERIAL_PROTOCOLLNPGM(" No overshoot ")
               SERIAL_PROTOCOLPGM(" Kp: "); SERIAL_PROTOCOLLN(Kp);
               SERIAL_PROTOCOLPGM(" Ki: "); SERIAL_PROTOCOLLN(Ki);
               SERIAL_PROTOCOLPGM(" Kd: "); SERIAL_PROTOCOLLN(Kd);
@@ -294,7 +296,7 @@ void PID_autotune(float temp, int extruder, int ncycles)
         p=soft_pwm[extruder];       
         SERIAL_PROTOCOLPGM("ok T:");
       }
-			
+
       SERIAL_PROTOCOL(input);   
       SERIAL_PROTOCOLPGM(" @:");
       SERIAL_PROTOCOLLN(p);       
@@ -306,7 +308,7 @@ void PID_autotune(float temp, int extruder, int ncycles)
       return;
     }
     if(cycles > ncycles) {
-      SERIAL_PROTOCOLLNPGM("PID Autotune finished! Put the last Kp, Ki and Kd constants from above into Configuration.h");
+      SERIAL_PROTOCOLLNPGM("PID Autotune finished! Put the Kp, Ki and Kd constants into Configuration.h");
       return;
     }
     lcd_update();
@@ -335,16 +337,17 @@ int getHeaterPower(int heater) {
     (defined(EXTRUDER_1_AUTO_FAN_PIN) && EXTRUDER_1_AUTO_FAN_PIN > -1) || \
     (defined(EXTRUDER_2_AUTO_FAN_PIN) && EXTRUDER_2_AUTO_FAN_PIN > -1)
 
-  #if defined(FAN_PIN) && FAN_PIN > -1
-    #if EXTRUDER_0_AUTO_FAN_PIN == FAN_PIN 
-       #error "You cannot set EXTRUDER_0_AUTO_FAN_PIN equal to FAN_PIN"
+  #if defined(EXTRUDER_FAN_SETUP) && EXTRUDER_FAN_SETUP > -1
+    #if EXTRUDER_0_AUTO_FAN_PIN == CASEFAN_PIN
+       #error "You cannot set EXTRUDER_0_AUTO_FAN_PIN equal to CASEFAN_PIN"
     #endif
-    #if EXTRUDER_1_AUTO_FAN_PIN == FAN_PIN 
-       #error "You cannot set EXTRUDER_1_AUTO_FAN_PIN equal to FAN_PIN"
+    #if EXTRUDER_1_AUTO_FAN_PIN == CASEFAN_PIN 
+       #error "You cannot set EXTRUDER_1_AUTO_FAN_PIN equal to CASEFAN_PIN"
     #endif
-    #if EXTRUDER_2_AUTO_FAN_PIN == FAN_PIN 
-       #error "You cannot set EXTRUDER_2_AUTO_FAN_PIN equal to FAN_PIN"
+    #if EXTRUDER_2_AUTO_FAN_PIN == CASEFAN_PIN 
+       #error "You cannot set EXTRUDER_2_AUTO_FAN_PIN equal to CASEFAN_PIN"
     #endif
+
   #endif 
 
 void setExtruderAutoFanState(int pin, bool state)
@@ -416,6 +419,13 @@ void manage_heater()
   for(int e = 0; e < EXTRUDERS; e++) 
   {
 
+    // &thermal_runaway_old_target_temperature[e]
+    
+     #ifdef THERMAL_RUNAWAY_PROTECTION_PERIOD && THERMAL_RUNAWAY_PROTECTION_PERIOD > 0
+    thermal_runaway_protection(&thermal_runaway_state_machine[e],&thermal_runaway_timer[e],&current_temperature[e],&target_temperature[e],e,THERMAL_RUNAWAY_PROTECTION_PERIOD,THERMAL_RUNAWAY_PROTECTION_DELTA); 
+  #endif
+ 
+    
   #ifdef PIDTEMP
     pid_input = current_temperature[e];
 
@@ -449,8 +459,7 @@ void manage_heater()
           pid_output = constrain(target_temperature[e], 0, PID_MAX);
     #endif //PID_OPENLOOP
     #ifdef PID_DEBUG
-    SERIAL_ECHO_START;
-    SERIAL_ECHO(" PID_DEBUG ");
+    SERIAL_ECHO_START(" PIDDEBUG ");
     SERIAL_ECHO(e);
     SERIAL_ECHO(": Input ");
     SERIAL_ECHO(pid_input);
@@ -526,6 +535,12 @@ void manage_heater()
 
   #if TEMP_SENSOR_BED != 0
   
+  // &thermal_runaway_bed_old_target_temperature
+  
+      #ifdef THERMAL_RUNAWAY_PROTECTION_BED_PERIOD && THERMAL_RUNAWAY_PROTECTION_BED_PERIOD > 0
+      thermal_runaway_protection(&thermal_runaway_bed_state_machine,&thermal_runaway_bed_timer,&current_temperature_bed,&target_temperature_bed,9,THERMAL_RUNAWAY_PROTECTION_BED_PERIOD,THERMAL_RUNAWAY_PROTECTION_BED_DELTA);
+    #endif
+
   #ifdef PIDTEMPBED
     pid_input = current_temperature_bed;
 
@@ -609,7 +624,6 @@ static float analog2temp(int raw, uint8_t e) {
       SERIAL_ERROR((int)e);
       SERIAL_ERRORLNPGM(" - Invalid extruder number !");
       kill();
-      return 0.0;
   } 
   #ifdef HEATER_0_USES_MAX6675
     if (e == 0)
@@ -728,14 +742,49 @@ void tp_init()
   #if defined(HEATER_BED_PIN) && (HEATER_BED_PIN > -1) 
     SET_OUTPUT(HEATER_BED_PIN);
   #endif  
-  #if defined(FAN_PIN) && (FAN_PIN > -1) 
-    SET_OUTPUT(FAN_PIN);
-    #ifdef FAST_PWM_FAN
-    setPwmFrequency(FAN_PIN, 1); // No prescaling. Pwm frequency = F_CPU/256/8
-    #endif
-    #ifdef FAN_SOFT_PWM
-    soft_pwm_fan = fanSpeedSoftPwm / 2;
-    #endif
+  #if defined(EXTRUDER_FAN_SETUP) && EXTRUDER_FAN_SETUP > -1 
+    #if EXTRUDER_FAN_SETUP == 1 || EXTRUDER_FAN_SETUP == 4
+	   SET_OUTPUT(EX_FAN_0);
+       #ifdef FAST_PWM_FAN
+       setPwmFrequency(EX_FAN_0, 1); // No prescaling. Pwm frequency = F_CPU/256/8
+       #endif
+       #ifdef FAN_SOFT_PWM
+       soft_pwm_fan = fanSpeedSoftPwm / 2;
+	   #endif
+	#endif
+	#if EXTRUDER_FAN_SETUP == 2
+        if(active_FAN == 0){
+	       SET_OUTPUT(EX_FAN_0);
+           #ifdef FAST_PWM_FAN
+           setPwmFrequency(EX_FAN_0, 1); // No prescaling. Pwm frequency = F_CPU/256/8
+           #endif
+           #ifdef FAN_SOFT_PWM
+           soft_pwm_fan = fanSpeedSoftPwm / 2;
+           #endif
+	    }
+		else if(active_FAN == 1){
+		   SET_OUTPUT(EX_FAN_1);
+           #ifdef FAST_PWM_FAN
+           setPwmFrequency(EX_FAN_1, 1); // No prescaling. Pwm frequency = F_CPU/256/8
+           #endif
+           #ifdef FAN_SOFT_PWM
+           soft_pwm_fan = fanSpeedSoftPwm / 2;
+           #endif
+		}
+	#endif 
+	#if EXTRUDER_FAN_SETUP == 3 
+	   SET_OUTPUT(EX_FAN_0);
+	   SET_OUTPUT(EX_FAN_1);
+       #ifdef FAST_PWM_FAN
+       setPwmFrequency(EX_FAN_0, 1); // No prescaling. Pwm frequency = F_CPU/256/8
+	   setPwmFrequency(EX_FAN_1, 1); // No prescaling. Pwm frequency = F_CPU/256/8
+       #endif
+       #ifdef FAN_SOFT_PWM
+       soft_pwm_fan = fanSpeedSoftPwm / 2;
+	   soft_pwm_fan1 = fanSpeedSoftPwm1 / 2;
+       #endif
+	#endif
+	
   #endif  
 
   #ifdef HEATER_0_USES_MAX6675
@@ -895,7 +944,172 @@ void setWatch()
   }
 #endif 
 }
+ 
+// float *old_target_temperature, 
+ 
+#ifdef THERMAL_RUNAWAY_PROTECTION_PERIOD && THERMAL_RUNAWAY_PROTECTION_PERIOD > 0     
+void thermal_runaway_protection(int *state, unsigned long *timer, float *temperature, int *target_temperature, int heater_id, int period_seconds, int delta_degc)
+{
+	//static char s[50];
+	// extruder temp vars
+    static float ext_last_temp[EXTRUDERS] = {0};
+    // bed temp vars
+    static float bed_last_temp = 0;
+    // pointer to correct temp vars (extuder or bed).
+    static float *last_temp;
+    //static float last_targ_temp = 0;
+    //static int pflag0 = 0, pflag1 = 0, pflag2 = 0;
+    
+    // why to know if its bed temp, if it is set to 0.
+    if(heater_id >= EXTRUDERS)
+		last_temp = &bed_last_temp;
+	else
+		last_temp = &ext_last_temp[heater_id];
+/*
+      SERIAL_ECHO_START;
+      SERIAL_ECHO("Thermal Thermal Runaway Running. Heater ID:");
+      SERIAL_ECHO(heater_id);
+      SERIAL_ECHO(" ;  State:");
+      SERIAL_ECHO(*state);
+      SERIAL_ECHO(" ;  Timer:");
+      SERIAL_ECHO(*timer);
+      SERIAL_ECHO(" ;  Temperature:");
+      SERIAL_ECHO(*temperature);
+      SERIAL_ECHO(" ;  Target Temp:");
+      SERIAL_ECHO(target_temperature);
+      SERIAL_ECHOLN("");    
+*/
 
+//  target_temperature != *old_target_temperature
+
+	// just return in already in thermal runaway
+	if (thermal_runaway)
+		return;
+		
+	// if target temp is zero or not the same as last time set state to 0 and record last target temp.
+	if (*target_temperature == 0)
+	{
+		*state = 0;
+		return;
+	}
+	//else if(target_temperature != last_targ_temp)
+	//{
+		//*state = 0;
+		//last_targ_temp = target_temperature;
+		//SERIAL_ERRORLNPGM("Thermal Runaway: Reseting target temperature!");
+		//return;
+	//}
+	
+	switch (*state)
+	{
+	case 0: // "Heater Inactive" state , *old_target_temperature = target_temperature;
+		if (*target_temperature > 0) 
+		{
+			*state = 1;
+			*timer = 0;
+			//*timer = millis();
+			*last_temp = 0;
+			
+			//////// debug
+			//if(pflag0 ==100)
+			//{
+				//SERIAL_ERRORLNPGM("Thermal Runaway: State 0 > 1!");
+				//pflag0=0;
+			//}
+			//pflag0++;
+			////////
+		}
+		break;
+		
+	case 1: // "First Heating" state  
+		// is it heating (temp over 90% target temp)
+		if(*temperature < (*target_temperature * 0.9))
+		{
+			//////// debug
+			//if(pflag1 ==100)
+			//{
+				//SERIAL_ERRORLNPGM("Is heating hot end!");
+				//pflag1=0;
+			//}
+			//pflag1++;
+			////////
+			
+			//// set timer
+			//if(*timer == 0)
+				//*timer = millis();
+				
+			// check for temperater increase
+			//if(*temperature <= (*last_temp+(float)hysteresis_degc) || *temperature > (*last_temp-(float)hysteresis_degc))
+			if(*temperature > (*last_temp+(float)delta_degc))
+			{
+				// still heating, rest variables.
+				if((*temperature+(float)delta_degc) > *target_temperature)
+					*last_temp = *temperature - (float)delta_degc;
+				else
+					*last_temp = *temperature;
+				*timer = millis();
+			}
+			else
+			{
+				// if temp has not increase in given period, shut it down!
+				if((millis()-*timer) > ((unsigned long)period_seconds)*1000)
+				{
+					// thermal runaway error
+					SERIAL_ERROR_START;
+					SERIAL_ERRORLNPGM("Thermal Runaway, system stopped! Heater_ID: ");
+					SERIAL_ERRORLN((int)heater_id);
+					LCD_ALERTMESSAGEPGM("THERMAL RUNAWAY");
+					
+					// print error msgs
+					SERIAL_ERRORLN(THERMAL_RUNAWAY_VERSION);
+					SERIAL_ERRORLNPGM("Thermal Runaway, Temperature: ");
+					SERIAL_ERRORLN((int)*temperature);
+					SERIAL_ERRORLNPGM("Thermal Runaway, Target Temperature: ");
+					SERIAL_ERRORLN((int)*target_temperature);
+					SERIAL_ERRORLNPGM("Thermal Runaway, 90% Target Temperature: ");
+					SERIAL_ERRORLN((int)(*target_temperature*0.9));
+					SERIAL_ERRORLNPGM("Thermal Runaway, Last Temperature: ");
+					SERIAL_ERRORLN((int)*last_temp);
+					SERIAL_ERRORLNPGM("Thermal Runaway, Timer: ");
+					SERIAL_ERRORLN((int)(millis()-*timer));
+					
+					thermal_runaway = true;
+
+					// most likely a bad sensor
+					while(1)
+					{
+						disable_heater();
+						disable_x();
+						disable_y();
+						disable_z();
+						disable_e0();
+						disable_e1();
+						disable_e2();
+						manage_heater();
+						lcd_update();
+					}
+				}			
+			}
+		}
+		else
+		{
+			*state = 0;
+			//*timer = 0;
+			
+			//////// debug
+			//if(pflag2 ==100)
+			//{
+				//SERIAL_ERRORLNPGM("Thermal Runaway: Reseting timer and state!");
+				//pflag2=0;
+			//}
+			//pflag2++;
+			////////
+
+		}
+		break;
+  }
+}
+#endif
 
 void disable_heater()
 {
@@ -910,7 +1124,7 @@ void disable_heater()
    #endif
   #endif
      
-  #if defined(TEMP_1_PIN) && TEMP_1_PIN > -1 && EXTRUDERS > 1
+  #if defined(TEMP_1_PIN) && TEMP_1_PIN > -1
     target_temperature[1]=0;
     soft_pwm[1]=0;
     #if defined(HEATER_1_PIN) && HEATER_1_PIN > -1 
@@ -918,7 +1132,7 @@ void disable_heater()
     #endif
   #endif
       
-  #if defined(TEMP_2_PIN) && TEMP_2_PIN > -1 && EXTRUDERS > 2
+  #if defined(TEMP_2_PIN) && TEMP_2_PIN > -1
     target_temperature[2]=0;
     soft_pwm[2]=0;
     #if defined(HEATER_2_PIN) && HEATER_2_PIN > -1  
@@ -1076,8 +1290,25 @@ ISR(TIMER0_COMPB_vect)
     if(soft_pwm_b > 0) WRITE(HEATER_BED_PIN,1); else WRITE(HEATER_BED_PIN,0);
     #endif
     #ifdef FAN_SOFT_PWM
-    soft_pwm_fan = fanSpeedSoftPwm / 2;
-    if(soft_pwm_fan > 0) WRITE(FAN_PIN,1); else WRITE(FAN_PIN,0);
+	    soft_pwm_fan = fanSpeedSoftPwm / 2;
+		soft_pwm_fan1 = fanSpeedSoftPwm1 / 2;
+	    #if defined(EXTRUDER_FAN_SETUP) && EXTRUDER_FAN_SETUP > -1
+	        #if EXTRUDER_FAN_SETUP == 1 || EXTRUDER_FAN_SETUP == 4
+                if(soft_pwm_fan > 0) WRITE(EX_FAN_0,1); else WRITE(EX_FAN_0,0);
+			#endif	
+			#if EXTRUDER_FAN_SETUP == 2  
+				if (active_FAN == 0){                                       
+			        if(soft_pwm_fan > 0) WRITE(EX_FAN_0,1); else WRITE(EX_FAN_0,0);
+				}	
+				else if (active_FAN == 1){                                       	
+			        if(soft_pwm_fan > 0) WRITE(EX_FAN_1,1); else WRITE(EX_FAN_1,0);
+				}
+			#endif
+			#if EXTRUDER_FAN_SETUP == 3 
+                if(soft_pwm_fan > 0) WRITE(EX_FAN_0,1); else WRITE(EX_FAN_0,0);
+				if(soft_pwm_fan1 > 0) WRITE(EX_FAN_1,1); else WRITE(EX_FAN_1,0);
+			#endif
+		#endif
     #endif
   }
   if(soft_pwm_0 < pwm_count) { 
@@ -1096,7 +1327,23 @@ ISR(TIMER0_COMPB_vect)
   if(soft_pwm_b < pwm_count) WRITE(HEATER_BED_PIN,0);
   #endif
   #ifdef FAN_SOFT_PWM
-  if(soft_pwm_fan < pwm_count) WRITE(FAN_PIN,0);
+	   #if defined(EXTRUDER_FAN_SETUP) && EXTRUDER_FAN_SETUP > -1
+	        #if EXTRUDER_FAN_SETUP == 1 || EXTRUDER_FAN_SETUP == 4
+                if(soft_pwm_fan < pwm_count) WRITE(EX_FAN_0,0);
+			#endif
+			#if EXTRUDER_FAN_SETUP == 2  
+				if (active_FAN == 0){                                       
+			       if(soft_pwm_fan < pwm_count) WRITE(EX_FAN_0,0);
+				}	
+				else if (active_FAN == 1){                                       	
+			       if(soft_pwm_fan < pwm_count) WRITE(EX_FAN_1,0);
+				}
+			#endif
+			#if EXTRUDER_FAN_SETUP == 3 
+                if(soft_pwm_fan < pwm_count) WRITE(EX_FAN_0,0);
+				if(soft_pwm_fan1 < pwm_count) WRITE(EX_FAN_1,0);
+			#endif
+		#endif
   #endif
   
   pwm_count += (1 << SOFT_PWM_SCALE);
@@ -1321,5 +1568,4 @@ float unscalePID_d(float d)
 }
 
 #endif //PIDTEMP
-
 

@@ -114,7 +114,7 @@
 // M92  - Set axis_steps_per_unit - same syntax as G92
 // M104 - Set extruder target temp
 // M105 - Read current temp
-// M106 - Fan on
+// M106 - Fan on - P0/P1 selects which fan to use for cooling S0 to S255 sets the fan speed
 // M107 - Fan off
 // M109 - Sxxx Wait for extruder current temp to reach target temp. Waits only when heating
 //        Rxxx Wait for extruder current temp to reach target temp. Waits when heating and cooling
@@ -230,8 +230,12 @@ float extruder_offset[NUM_EXTRUDER_OFFSETS][EXTRUDERS] = {
 #endif
 };
 #endif
+
 uint8_t active_extruder = 0;
+uint8_t active_FAN = 0;
 int fanSpeed=0;
+int fanSpeed1=0;
+
 #ifdef SERVO_ENDSTOPS
   int servo_endstops[] = SERVO_ENDSTOPS;
   int servo_endstop_angles[] = SERVO_ENDSTOP_ANGLES;
@@ -521,12 +525,26 @@ void setup()
   lcd_init();
   _delay_ms(1000);	// wait 1sec to display the splash screen
 
-  #if defined(CONTROLLERFAN_PIN) && CONTROLLERFAN_PIN > -1
-    SET_OUTPUT(CONTROLLERFAN_PIN); //Set pin used for driver cooling fan
-  #endif
+  #if defined(CASEFAN_PIN) && CASEFAN_PIN > -1
+    SET_OUTPUT(CASEFAN_PIN); //Set pin used for driver cooling fan
+	//
+	if (CASEFAN_SPEED_FULL <= CASEFAN_SPEED_MAX)
+	{
+            digitalWrite(CASEFAN_PIN, CASEFAN_SPEED_FULL); 
+            analogWrite(CASEFAN_PIN, CASEFAN_SPEED_FULL);
+	}
+	else 
+	{
+            digitalWrite(CASEFAN_PIN, CASEFAN_SPEED_MAX); 
+            analogWrite(CASEFAN_PIN, CASEFAN_SPEED_MAX);
+	}
 
-  #ifdef DIGIPOT_I2C
-    digipot_i2c_init();
+//  #if defined(CONTROLLERFAN_PIN) && CONTROLLERFAN_PIN > -1
+//    SET_OUTPUT(CONTROLLERFAN_PIN); //Set pin used for driver cooling fan
+//  #endif
+
+//  #ifdef DIGIPOT_I2C
+//    digipot_i2c_init();
   #endif
 }
 
@@ -930,7 +948,7 @@ static void run_z_probe() {
     st_synchronize();
 
     // move back down slowly to find bed
-    feedrate = homing_feedrate[Z_AXIS]/4;
+    feedrate = homing_feedrate[Z_AXIS]/40;
     zPosition -= home_retract_mm(Z_AXIS) * 2;
     plan_buffer_line(current_position[X_AXIS], current_position[Y_AXIS], zPosition, current_position[E_AXIS], feedrate/60, active_extruder);
     st_synchronize();
@@ -1227,6 +1245,10 @@ void process_commands()
 #endif //ENABLE_AUTO_BED_LEVELING
 
 
+      //set endstop switch trigger period to less
+      endstop_trig_period = HOME_PROBE_ENDSTOP_PERIOD;
+
+
       saved_feedrate = feedrate;
       saved_feedmultiply = feedmultiply;
       feedmultiply = 100;
@@ -1318,7 +1340,7 @@ void process_commands()
         current_position[Y_AXIS] = destination[Y_AXIS];
         current_position[Z_AXIS] = destination[Z_AXIS];
       }
-      #endif
+      #endif  // QUICK_HOME
 
       if((home_all_axis) || (code_seen(axis_codes[X_AXIS])))
       {
@@ -1412,8 +1434,6 @@ void process_commands()
         #endif
       #endif
 
-
-
       if(code_seen(axis_codes[Z_AXIS])) {
         if(code_value_long() != 0) {
           current_position[Z_AXIS]=code_value()+add_homeing[2];
@@ -1435,6 +1455,9 @@ void process_commands()
       feedmultiply = saved_feedmultiply;
       previous_millis_cmd = millis();
       endstops_hit_on_purpose();
+      
+      //set endstop switch trigger back to std period
+      endstop_trig_period = STD_ENDSTOP_PERIOD;
       break;
 
 #ifdef ENABLE_AUTO_BED_LEVELING
@@ -1443,6 +1466,9 @@ void process_commands()
             #if Z_MIN_PIN == -1
             #error "You must have a Z_MIN endstop in order to enable Auto Bed Leveling feature!!! Z_MIN_PIN must point to a valid hardware pin."
             #endif
+            
+            //set endstop switch trigger period to less
+            endstop_trig_period = HOME_PROBE_ENDSTOP_PERIOD;
 
             // Prevent user from running a G29 without first homing in X and Y
             if (! (axis_known_position[X_AXIS] && axis_known_position[Y_AXIS]) )
@@ -1578,6 +1604,11 @@ void process_commands()
             apply_rotation_xyz(plan_bed_level_matrix, x_tmp, y_tmp, z_tmp);         //Apply the correction sending the probe offset
             current_position[Z_AXIS] = z_tmp - real_z + current_position[Z_AXIS];   //The difference is added to current position and sent to planner.
             plan_set_position(current_position[X_AXIS], current_position[Y_AXIS], current_position[Z_AXIS], current_position[E_AXIS]);
+        
+            //set endstop switch trigger back to std period
+            endstop_trig_period = STD_ENDSTOP_PERIOD;
+            SERIAL_ECHOLNPGM("Probing done!");
+        
         }
         break;
 
@@ -2036,15 +2067,60 @@ void process_commands()
 
     #if defined(FAN_PIN) && FAN_PIN > -1
       case 106: //M106 Fan On
-        if (code_seen('S')){
-           fanSpeed=constrain(code_value(),0,255);
-        }
-        else {
-          fanSpeed=255;
-        }
+		#if defined(EXTRUDER_FAN_SETUP) && EXTRUDER_FAN_SETUP == 1  //If EXTRUDER_FAN_SETUP = 2 then P0 will control fan0 and P1 will switch to fan1
+		   	if (code_seen('S')){    //Setting the fan speed from 0 to 255
+				fanSpeed=constrain(code_value(),0,255);
+			}
+			else {
+				fanSpeed=255;
+			}
+		#endif 
+		#if defined(EXTRUDER_FAN_SETUP) && EXTRUDER_FAN_SETUP == 2  //If EXTRUDER_FAN_SETUP = 2 then P0 will control fan0 and P1 will switch to fan1
+			if (code_seen('P')){ 
+				active_FAN=constrain(code_value(),0,1);
+			}
+			if (code_seen('S')){    //Setting the fan speed from 0 to 255
+				fanSpeed=constrain(code_value(),0,255);
+			}
+			else {
+				fanSpeed=255;
+			}
+		#endif   
+		#if defined(EXTRUDER_FAN_SETUP) && EXTRUDER_FAN_SETUP == 3  //If EXTRUDER_FAN_SETUP = 2 then P0 will control fan0 and P1 will switch to fan1
+			active_FAN = 0;
+			if (code_seen('P')){ 
+				active_FAN=constrain(code_value(),0,1);
+			}
+			if (active_FAN == 0){
+				if (code_seen('S')){    //Setting the fan speed from 0 to 255
+					fanSpeed=constrain(code_value(),0,255);
+				}
+				else {
+					fanSpeed=255;
+				}
+			}
+			else if (active_FAN == 1){
+				if (code_seen('S')){    //Setting the fan speed from 0 to 255
+					fanSpeed1=constrain(code_value(),0,255);
+				}
+				else {
+					fanSpeed1=255;
+				}
+			}
+		#endif 
+		#if defined(EXTRUDER_FAN_SETUP) && EXTRUDER_FAN_SETUP == 4
+			if (code_seen('S')){    //Setting the fan speed from 0 to 255
+				fanSpeed=constrain(code_value(),0,255);
+			}
+			else {
+				fanSpeed=255;
+			}
+		#endif
         break;
       case 107: //M107 Fan Off
+		active_FAN = 0;
         fanSpeed = 0;
+		fanSpeed1 = 0;
         break;
     #endif //FAN_PIN
     #ifdef BARICUDA
